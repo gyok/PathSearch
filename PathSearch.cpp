@@ -19,9 +19,21 @@ PathSearch::PathSearch(const std::string &i_filename, std::string i_from,
     from_index = static_cast<size_t>(std::distance(m_towns.begin(), from_it));
   if (to_it != m_towns.end())
     to_index = static_cast<size_t>(std::distance(m_towns.begin(), to_it));
+
+  m_copy_towns = m_towns;
   PrintPath(WideSearch(from_index, to_index));
   std::cout << std::endl << std::endl;
+  m_copy_towns = m_towns;
   PrintPath(DepthSearch(from_index, to_index));
+  std::cout << std::endl << std::endl;
+  m_copy_towns = m_towns;
+  PrintPath(DepthSearchWithBounding(from_index, to_index, 8));
+  std::cout << std::endl << std::endl;
+  m_copy_towns = m_towns;
+  PrintPath(IterativeDepthSearch(from_index, to_index));
+  std::cout << std::endl << std::endl;
+  m_copy_towns = m_towns;
+  PrintPath(BidirectionalSearch(from_index, to_index));
 }
 
 PathSearch::Path PathSearch::WideSearch(size_t i_from_index,
@@ -29,26 +41,26 @@ PathSearch::Path PathSearch::WideSearch(size_t i_from_index,
   std::vector<std::pair<size_t, std::vector<Connection>>> connections_list,
       next_connections_list;
   Path path;
-  static auto copy_towns = m_towns;
   int i = 0;
   connections_list.push_back(std::make_pair(
-      i_from_index, copy_towns[i_from_index].mp_connected_towns));
+      i_from_index, m_copy_towns[i_from_index].mp_connected_towns));
   while (i < 1000) {
     i++;
     for (const auto &connections : connections_list)
       for (const auto &connection : connections.second) {
-        if (!copy_towns[connection.m_destination_town_id].m_learned) {
-          copy_towns[connection.m_destination_town_id].m_learned = true;
+        if (!m_copy_towns[connection.m_destination_town_id].m_learned) {
+          m_copy_towns[connection.m_destination_town_id].m_learned = true;
           path.push_back(
-              copy_towns[connections.first].m_town_name + " " +
-              copy_towns[connection.m_destination_town_id].m_town_name);
+              m_copy_towns[connections.first].m_town_name + " " +
+              m_copy_towns[connection.m_destination_town_id].m_town_name);
 
           if (connection.m_destination_town_id == i_end_index)
             return path;
 
-          next_connections_list.push_back(std::make_pair(
-              connection.m_destination_town_id,
-              copy_towns[connection.m_destination_town_id].mp_connected_towns));
+          next_connections_list.push_back(
+              std::make_pair(connection.m_destination_town_id,
+                             m_copy_towns[connection.m_destination_town_id]
+                                 .mp_connected_towns));
         }
       }
     connections_list = next_connections_list;
@@ -59,13 +71,12 @@ PathSearch::Path PathSearch::WideSearch(size_t i_from_index,
 
 PathSearch::Path PathSearch::DepthSearch(size_t i_from_index,
                                          size_t i_end_index) {
-  static auto copy_towns = m_towns;
-  for (const auto &connection : copy_towns[i_from_index].mp_connected_towns) {
-    if (!copy_towns[connection.m_destination_town_id].m_learned) {
-      copy_towns[connection.m_destination_town_id].m_learned = true;
+  for (const auto &connection : m_copy_towns[i_from_index].mp_connected_towns) {
+    if (!m_copy_towns[connection.m_destination_town_id].m_learned) {
+      m_copy_towns[connection.m_destination_town_id].m_learned = true;
       auto path =
-          Path{copy_towns[i_from_index].m_town_name + " " +
-               copy_towns[connection.m_destination_town_id].m_town_name};
+          Path{m_copy_towns[i_from_index].m_town_name + " " +
+               m_copy_towns[connection.m_destination_town_id].m_town_name};
       if (connection.m_destination_town_id == i_end_index)
         return path;
       auto finded_path =
@@ -76,6 +87,114 @@ PathSearch::Path PathSearch::DepthSearch(size_t i_from_index,
         return path;
       }
     }
+  }
+  return Path();
+}
+
+PathSearch::Path PathSearch::DepthSearchWithBounding(size_t i_from_index,
+                                                     size_t i_end_index,
+                                                     int i_bound,
+                                                     int i_depth_level) {
+  i_depth_level++;
+  for (const auto &connection : m_copy_towns[i_from_index].mp_connected_towns) {
+    if (!m_copy_towns[connection.m_destination_town_id].m_learned &&
+        i_depth_level < i_bound) {
+      m_copy_towns[connection.m_destination_town_id].m_learned = true;
+      auto path =
+          Path{m_copy_towns[i_from_index].m_town_name + " " +
+               m_copy_towns[connection.m_destination_town_id].m_town_name};
+      if (connection.m_destination_town_id == i_end_index)
+        return path;
+      auto finded_path =
+          DepthSearchWithBounding(connection.m_destination_town_id, i_end_index,
+                                  i_bound, i_depth_level);
+      if (!finded_path.empty()) {
+        path.insert(path.end(), std::make_move_iterator(finded_path.begin()),
+                    std::make_move_iterator(finded_path.end()));
+        return path;
+      }
+    }
+  }
+  return Path();
+}
+
+PathSearch::Path PathSearch::IterativeDepthSearch(size_t i_from_index,
+                                                  size_t i_end_index) {
+  int bound = 1;
+  Path path;
+  do {
+    m_copy_towns = m_towns;
+    path = DepthSearchWithBounding(i_from_index, i_end_index, bound);
+    bound++;
+  } while (path.empty());
+  return path;
+}
+
+PathSearch::Path PathSearch::BidirectionalSearch(size_t i_from_index,
+                                                 size_t i_end_index) {
+  std::vector<std::pair<size_t, std::vector<Connection>>>
+      start_connections_list, next_start_connections_list, end_connections_list,
+      next_end_connections_list;
+  std::vector<size_t> start_towns, end_towns;
+  Path start_path, end_path;
+  int i = 0;
+  start_connections_list.push_back(std::make_pair(
+      i_from_index, m_copy_towns[i_from_index].mp_connected_towns));
+  end_connections_list.push_back(std::make_pair(
+      i_end_index, m_copy_towns[i_end_index].mp_connected_towns));
+  while (i < 1000) {
+    i++;
+
+    for (const auto &connections : start_connections_list)
+      for (const auto &connection : connections.second)
+        start_towns.push_back(connection.m_destination_town_id);
+    for (const auto &connections : end_connections_list)
+      for (const auto &connection : connections.second)
+        end_towns.push_back(connection.m_destination_town_id);
+
+    std::sort(start_towns.begin(), start_towns.end());
+    std::sort(end_towns.begin(), end_towns.end());
+    auto buff = std::vector<size_t>(start_towns.size() + end_towns.size());
+    auto intersect_it =
+        std::set_intersection(start_towns.begin(), start_towns.end(),
+                              end_towns.begin(), end_towns.end(), buff.begin());
+    if (intersect_it != buff.begin()) {
+      start_path.insert(start_path.end(), end_path.begin(), end_path.end());
+      for (auto it = buff.begin(); it != intersect_it; it++)
+        start_path.push_back(m_copy_towns[*it].m_town_name);
+      return start_path;
+    }
+
+    for (const auto &connections : start_connections_list)
+      for (const auto &connection : connections.second) {
+        if (!m_copy_towns[connection.m_destination_town_id].m_learned) {
+          m_copy_towns[connection.m_destination_town_id].m_learned = true;
+          start_path.push_back(
+              m_copy_towns[connections.first].m_town_name + " " +
+              m_copy_towns[connection.m_destination_town_id].m_town_name);
+          next_start_connections_list.push_back(
+              std::make_pair(connection.m_destination_town_id,
+                             m_copy_towns[connection.m_destination_town_id]
+                                 .mp_connected_towns));
+        }
+      }
+    for (const auto &connections : end_connections_list)
+      for (const auto &connection : connections.second) {
+        if (!m_copy_towns[connection.m_destination_town_id].m_learned) {
+          m_copy_towns[connection.m_destination_town_id].m_learned = true;
+          end_path.push_back(
+              m_copy_towns[connections.first].m_town_name + " " +
+              m_copy_towns[connection.m_destination_town_id].m_town_name);
+          next_end_connections_list.push_back(
+              std::make_pair(connection.m_destination_town_id,
+                             m_copy_towns[connection.m_destination_town_id]
+                                 .mp_connected_towns));
+        }
+      }
+    start_connections_list = next_start_connections_list;
+    next_start_connections_list.empty();
+    end_connections_list = next_end_connections_list;
+    next_end_connections_list.empty();
   }
   return Path();
 }

@@ -32,10 +32,15 @@ public:
 private:
   Path WideSearch(size_t i_from_index, size_t i_end_index);
   Path DepthSearch(size_t i_from_index, size_t i_end_index);
+  Path DepthSearchWithBounding(size_t i_from_index, size_t i_end_index,
+                               int i_bound, int i_depth_level = 0);
+  Path IterativeDepthSearch(size_t i_from_index, size_t i_end_index);
+  Path BidirectionalSearch(size_t i_from_index, size_t i_end_index);
   void PrintPath(const Path &i_path);
   void ParseFile(const std::string &i_filename);
 
 private:
   std::vector<Town> m_towns;
+  std::vector<Town> m_copy_towns;
   Town *mp_root;
 };
