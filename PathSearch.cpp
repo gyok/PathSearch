@@ -34,6 +34,10 @@ PathSearch::PathSearch(const std::string &i_filename, std::string i_from,
   std::cout << std::endl << std::endl;
   m_copy_towns = m_towns;
   PrintPath(BidirectionalSearch(from_index, to_index));
+  m_copy_towns = m_towns;
+  auto path_with_distance = GreedySearch(from_index, to_index);
+  PrintPath(path_with_distance.first);
+  std::cout << path_with_distance.second << std::endl << std::endl;
 }
 
 PathSearch::Path PathSearch::WideSearch(size_t i_from_index,
@@ -197,6 +201,32 @@ PathSearch::Path PathSearch::BidirectionalSearch(size_t i_from_index,
     next_end_connections_list.empty();
   }
   return Path();
+}
+
+std::pair<PathSearch::Path, int> PathSearch::GreedySearch(size_t i_from_index,
+                                                          size_t i_end_index) {
+  Path path;
+  int distance{};
+  while (i_from_index != i_end_index) {
+    m_copy_towns[i_from_index].m_learned = true;
+    auto closer_connection = std::min_element(
+        m_copy_towns[i_from_index].mp_connected_towns.begin(),
+        m_copy_towns[i_from_index].mp_connected_towns.end(),
+        [&](const Connection &i_connection1, const Connection &i_connection2) {
+          return (i_connection1.m_distance < i_connection2.m_distance &&
+                  !m_copy_towns[i_connection1.m_destination_town_id]
+                       .m_learned) ||
+                 m_copy_towns[i_connection2.m_destination_town_id].m_learned;
+        });
+
+    path.emplace_back(
+        m_copy_towns[i_from_index].m_town_name + " " +
+        m_copy_towns[closer_connection->m_destination_town_id].m_town_name);
+
+    distance += closer_connection->m_distance;
+    i_from_index = closer_connection->m_destination_town_id;
+  }
+  return {path, distance};
 }
 
 void PathSearch::PrintPath(const Path &i_path) {

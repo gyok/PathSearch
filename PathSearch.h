@@ -36,6 +36,7 @@ private:
                                int i_bound, int i_depth_level = 0);
   Path IterativeDepthSearch(size_t i_from_index, size_t i_end_index);
   Path BidirectionalSearch(size_t i_from_index, size_t i_end_index);
+  std::pair<Path, int> GreedySearch(size_t i_from_index, size_t i_end_index);
   void PrintPath(const Path &i_path);
   void ParseFile(const std::string &i_filename);
 
